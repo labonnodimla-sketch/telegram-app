@@ -22,16 +22,26 @@ service cloud.firestore {
 
     // User Profile
     match /users/{userId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
+      allow read: if true;
       allow create: if isSignedIn() && request.auth.uid == userId &&
         request.resource.data.userId == userId &&
-        request.resource.data.displayName is string && request.resource.data.displayName.size() <= 100 &&
         request.resource.data.balance is number &&
         request.resource.data.coins is number;
-      allow update: if isSignedIn() && request.auth.uid == userId &&
-        request.resource.data.userId == resource.data.userId;
+      allow update: if isSignedIn() && (
+        request.auth.uid == userId ||
+        // Allow updating referral stats by a referred user
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['referralCount', 'coins', 'balance', 'totalEarned', 'updatedAt'])
+      );
       allow delete: if false;
+    }
+
+    // Real Referrals Collection
+    match /referrals/{referralId} {
+      allow read: if true;
+      allow create: if isSignedIn() &&
+        request.resource.data.referrerCode is string &&
+        request.resource.data.referredUserId is string;
+      allow update, delete: if false;
     }
 
     // Tasks collection - public catalog

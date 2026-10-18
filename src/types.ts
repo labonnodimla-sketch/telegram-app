@@ -4,10 +4,10 @@ export interface UserProfile {
   displayName: string;
   photoUrl?: string;
   telegramUsername?: string;
-  balance: number; // in BDT (৳)
-  coins: number;
-  level: number;
-  totalEarned: number;
+  balance: number; // in BDT (৳) - starts from 0
+  coins: number;    // starts from 0
+  level: number;    // starts from 1
+  totalEarned: number; // starts from 0
   totalWithdrawn: number;
   todayEarned: number;
   todayVideosWatched: number;
@@ -18,6 +18,18 @@ export interface UserProfile {
   lastBonusDate?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface ReferralRecord {
+  id?: string;
+  referrerCode: string;
+  referrerId?: string;
+  referredUserId: string;
+  referredName: string;
+  referredUsername: string;
+  rewardAmount: number;
+  rewardCoins: number;
+  createdAt: string;
 }
 
 export type TaskCategory = 'video' | 'sponsor' | 'survey' | 'social' | 'daily';

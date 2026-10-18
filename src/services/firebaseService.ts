@@ -10,9 +10,10 @@ import {
   where,
   limit,
   Unsubscribe,
+  increment,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { UserProfile, TaskItem, TaskCompletion, WithdrawalRequest, PaymentMethod } from '../types';
+import { UserProfile, TaskItem, TaskCompletion, WithdrawalRequest, PaymentMethod, ReferralRecord } from '../types';
 import { INITIAL_TASKS } from '../data/defaultTasks';
 import { User } from 'firebase/auth';
 
@@ -20,6 +21,7 @@ const USERS_COL = 'users';
 const TASKS_COL = 'tasks';
 const COMPLETIONS_COL = 'completions';
 const WITHDRAWALS_COL = 'withdrawals';
+const REFERRALS_COL = 'referrals';
 
 export interface TelegramUserData {
   id: number;
@@ -37,7 +39,6 @@ export async function ensureUserInFirestore(
   try {
     const snap = await getDoc(userRef);
 
-    // Detect Telegram WebApp user info if available from window or parameter
     let tgUser: TelegramUserData | undefined = customTelegramUser;
     if (!tgUser && typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initDataUnsafe?.user) {
       tgUser = (window as any).Telegram.WebApp.initDataUnsafe.user;
@@ -45,7 +46,6 @@ export async function ensureUserInFirestore(
 
     if (snap.exists()) {
       const existing = snap.data() as UserProfile;
-      // If Telegram user info is now available, sync it
       if (tgUser) {
         const updatedName = tgUser.first_name + (tgUser.last_name ? ` ${tgUser.last_name}` : '');
         const updatedUsername = tgUser.username ? `@${tgUser.username}` : existing.telegramUsername;
@@ -71,7 +71,7 @@ export async function ensureUserInFirestore(
       return existing;
     }
 
-    // Creating a brand new real user
+    // Creating a brand new user starting from ZERO (0)
     let realName = 'User';
     let telegramUsername = '';
     let realPhoto = '';
@@ -91,6 +91,7 @@ export async function ensureUserInFirestore(
       telegramUsername = `@${realName}`;
     }
 
+    // Generate unique referral code
     const referralCode = 'EARN' + Math.floor(1000 + Math.random() * 9000);
     const newProfile: UserProfile = {
       userId: firebaseUser.uid,
@@ -98,12 +99,12 @@ export async function ensureUserInFirestore(
       displayName: realName,
       photoUrl: realPhoto || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
       telegramUsername: telegramUsername || '@user',
-      balance: 150.00, // Starter bonus
-      coins: 750,
-      level: 2,
-      totalEarned: 150.00,
+      balance: 0.00,       // Starts from zero (0)
+      coins: 0,           // Starts from zero (0)
+      level: 1,           // Level 1
+      totalEarned: 0.00,   // Starts from zero (0)
       totalWithdrawn: 0.00,
-      todayEarned: 15.00,
+      todayEarned: 0.00,
       todayVideosWatched: 0,
       dailyVideoLimit: 15,
       referralCode,
@@ -118,6 +119,100 @@ export async function ensureUserInFirestore(
     handleFirestoreError(err, OperationType.WRITE, `${USERS_COL}/${firebaseUser.uid}`);
     throw err;
   }
+}
+
+// REAL REFERRAL LOGIC: Triggered when user opens with referral link
+export async function processReferralCode(
+  currentUserProfile: UserProfile,
+  referrerCode: string
+): Promise<{ success: boolean; message: string }> {
+  // If user already has a referrer or using own code
+  if (currentUserProfile.referredBy || currentUserProfile.referralCode === referrerCode) {
+    return { success: false, message: 'Already referred or invalid code' };
+  }
+
+  try {
+    // 1. Find the inviter in Firestore by referralCode
+    const q = query(collection(db, USERS_COL), where('referralCode', '==', referrerCode), limit(1));
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      console.warn('Referral code not found in DB:', referrerCode);
+      return { success: false, message: 'Referral code not found' };
+    }
+
+    const inviterDoc = snap.docs[0];
+    const inviterId = inviterDoc.id;
+
+    if (inviterId === currentUserProfile.userId) {
+      return { success: false, message: 'Cannot refer yourself' };
+    }
+
+    const rewardTaka = 20.0;
+    const rewardCoins = 100;
+
+    // 2. Credit the inviter with reward and increment count
+    await updateDoc(doc(db, USERS_COL, inviterId), {
+      referralCount: increment(1),
+      balance: increment(rewardTaka),
+      coins: increment(rewardCoins),
+      totalEarned: increment(rewardTaka),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // 3. Save to real referrals collection
+    const referralDocRef = doc(collection(db, REFERRALS_COL));
+    const record: ReferralRecord = {
+      referrerCode,
+      referrerId: inviterId,
+      referredUserId: currentUserProfile.userId,
+      referredName: currentUserProfile.displayName,
+      referredUsername: currentUserProfile.telegramUsername || '@user',
+      rewardAmount: rewardTaka,
+      rewardCoins: rewardCoins,
+      createdAt: new Date().toISOString(),
+    };
+    await setDoc(referralDocRef, record);
+
+    // 4. Update the invited user's document
+    await updateDoc(doc(db, USERS_COL, currentUserProfile.userId), {
+      referredBy: referrerCode,
+      updatedAt: new Date().toISOString(),
+    });
+
+    return { success: true, message: 'Referral processed successfully' };
+  } catch (err) {
+    console.warn('Error processing referral:', err);
+    return { success: false, message: 'Failed to process referral' };
+  }
+}
+
+// Subscribe to real referrals for the current user's referral code
+export function subscribeToRealReferrals(
+  referrerCode: string,
+  callback: (referrals: ReferralRecord[]) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, REFERRALS_COL),
+    where('referrerCode', '==', referrerCode),
+    limit(50)
+  );
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list: ReferralRecord[] = [];
+      snap.forEach((d) => {
+        list.push({ id: d.id, ...(d.data() as ReferralRecord) });
+      });
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      callback(list);
+    },
+    (err) => {
+      console.warn('Error subscribing to referrals:', err);
+      callback([]);
+    }
+  );
 }
 
 export function subscribeToUserProfile(userId: string, callback: (profile: UserProfile | null) => void): Unsubscribe {
@@ -137,7 +232,6 @@ export function subscribeToUserProfile(userId: string, callback: (profile: UserP
   );
 }
 
-// Seed initial tasks if empty
 export async function seedInitialTasksIfEmpty(): Promise<void> {
   const tasksRef = collection(db, TASKS_COL);
   try {
@@ -151,7 +245,7 @@ export async function seedInitialTasksIfEmpty(): Promise<void> {
       }
     }
   } catch (err) {
-    console.warn('Could not seed tasks or already seeded:', err);
+    console.warn('Could not seed tasks:', err);
   }
 }
 
@@ -194,7 +288,7 @@ export async function completeTaskInFirestore(
     ? Math.min((currentProfile.todayVideosWatched || 0) + 1, currentProfile.dailyVideoLimit || 15)
     : currentProfile.todayVideosWatched || 0;
 
-  const newLevel = Math.max(currentProfile.level || 1, Math.floor(updatedCoins / 500) + 1);
+  const newLevel = Math.max(1, Math.floor(updatedCoins / 500) + 1);
 
   try {
     const completionData: TaskCompletion = {

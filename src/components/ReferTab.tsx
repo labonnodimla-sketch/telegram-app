@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { UserProfile } from '../types';
+import React, { useState, useEffect } from 'react';
+import { UserProfile, ReferralRecord } from '../types';
 import { formatTaka, toBengaliNumber } from '../data/defaultTasks';
+import { subscribeToRealReferrals } from '../services/firebaseService';
 import { 
   Users, 
   Copy, 
@@ -9,7 +10,8 @@ import {
   Gift, 
   Sparkles, 
   TrendingUp, 
-  Award 
+  Award,
+  UserCheck
 } from 'lucide-react';
 
 interface ReferTabProps {
@@ -18,21 +20,36 @@ interface ReferTabProps {
 
 export const ReferTab: React.FC<ReferTabProps> = ({ profile }) => {
   const [copied, setCopied] = useState(false);
+  const [realReferrals, setRealReferrals] = useState<ReferralRecord[]>([]);
+  const [loadingReferrals, setLoadingReferrals] = useState(true);
 
-  const referralLink = `https://t.me/AdEarnMiniApp_bot?start=${profile.referralCode || 'EARN778'}`;
+  // Subscribe to REAL referrals from Firestore
+  useEffect(() => {
+    if (!profile.referralCode) return;
+    setLoadingReferrals(true);
+    const unsub = subscribeToRealReferrals(profile.referralCode, (records) => {
+      setRealReferrals(records);
+      setLoadingReferrals(false);
+    });
+    return () => unsub();
+  }, [profile.referralCode]);
+
+  // Construct real Telegram Mini App startapp referral link and fallback web link
+  const botUsername = 'AdEarnMiniApp_bot';
+  const telegramReferralLink = `https://t.me/${botUsername}?start=${profile.referralCode || 'EARN1000'}`;
+  
+  // Web app direct link with ?startapp= or ?ref=
+  const webReferralLink = typeof window !== 'undefined'
+    ? `${window.location.origin}${window.location.pathname}?startapp=${profile.referralCode || 'EARN1000'}`
+    : telegramReferralLink;
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(referralLink);
+    navigator.clipboard.writeText(telegramReferralLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const sampleReferrals = [
-    { name: 'Tanvir Ahmed', username: '@tanvir_pro', date: '১২ ঘণ্টা আগে', reward: 20 },
-    { name: 'Sabbir Hossain', username: '@sabbir99', date: '১ দিন আগে', reward: 20 },
-    { name: 'Rakibul Islam', username: '@rakib_bd', date: '২ দিন আগে', reward: 20 },
-    { name: 'Mehedi Hasan', username: '@mehedi_live', date: '৩ দিন আগে', reward: 20 },
-  ];
+  const shareText = `AdEarn Mini App-এ বিজ্ঞাপন ও ভিডিও দেখে প্রতিদিন বিকাশ ও নগদে টাকা ইনকাম করুন! আমার রেফারেল লিংকে জয়েন করলেই পাবেন ফ্রি বোনাস: ${telegramReferralLink}`;
 
   return (
     <div className="space-y-4">
@@ -45,15 +62,15 @@ export const ReferTab: React.FC<ReferTabProps> = ({ profile }) => {
         <div className="relative z-10 space-y-2">
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-semibold">
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>রেফার করুন ও আনলিমিটেড আয় করুন</span>
+            <span>রেফারেল প্রোগ্রাম</span>
           </div>
 
           <h2 className="text-xl font-bold text-white">
-            প্রতি রেফারে পান <span className="text-amber-400">৳২০.০০</span> + ১০% কমিশন
+            প্রতি রেফারে পান <span className="text-amber-400">৳২০.০০</span> + ১০০ কয়েন
           </h2>
 
           <p className="text-xs text-slate-300 leading-relaxed max-w-xs">
-            আপনার বন্ধুদের টেলিগ্রামে আমন্ত্রণ জানান। আপনার লিংকে জয়েন করলেই আপনি পাবেন নগদ কয়েন এবং তাদের আয়ের ১০% আজীবন কমিশন!
+            আপনার ইউনিক রেফারেল লিংক বন্ধুদের পাঠান। তারা এই লিংকে মিনি অ্যাপ চালু করলেই সাথে সাথে আপনার অ্যাকাউন্টে টাকা ও কয়েন যোগ হবে!
           </p>
         </div>
       </div>
@@ -63,7 +80,7 @@ export const ReferTab: React.FC<ReferTabProps> = ({ profile }) => {
         <div className="flex items-center justify-between text-xs text-slate-300">
           <span className="font-semibold">আপনার রেফারেল লিংক:</span>
           <span className="font-mono text-amber-400 font-bold">
-            কোড: {profile.referralCode || 'EARN778'}
+            কোড: {profile.referralCode || 'EARN1000'}
           </span>
         </div>
 
@@ -71,7 +88,7 @@ export const ReferTab: React.FC<ReferTabProps> = ({ profile }) => {
           <input
             type="text"
             readOnly
-            value={referralLink}
+            value={telegramReferralLink}
             className="flex-1 bg-transparent px-2 text-xs text-slate-300 font-mono focus:outline-none truncate"
           />
           <button
@@ -84,17 +101,17 @@ export const ReferTab: React.FC<ReferTabProps> = ({ profile }) => {
         </div>
 
         <a
-          href={`https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent('AdEarn Mini App-এ বিজ্ঞাপন ও ভিডিও দেখে প্রতিদিন আয় করুন! ইনস্ট্যান্ট বিকাশ ও নগদ পেমেন্ট!')}`}
+          href={`https://t.me/share/url?url=${encodeURIComponent(telegramReferralLink)}&text=${encodeURIComponent(shareText)}`}
           target="_blank"
           rel="noreferrer"
-          className="w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-98 shadow-md shadow-sky-950/30"
+          className="w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-98 shadow-md shadow-sky-950/30 cursor-pointer"
         >
           <Share2 className="w-3.5 h-3.5" />
           <span>টেলিগ্রামে বন্ধুদের সাথে শেয়ার করুন</span>
         </a>
       </div>
 
-      {/* Stats Grid */}
+      {/* Real Stats Grid */}
       <div className="grid grid-cols-2 gap-2.5">
         <div className="rounded-xl bg-slate-900/90 border border-slate-800 p-3 shadow-md flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
@@ -103,7 +120,7 @@ export const ReferTab: React.FC<ReferTabProps> = ({ profile }) => {
           <div>
             <p className="text-[10px] text-slate-400">মোট রেফারেল</p>
             <p className="text-base font-bold text-white font-mono">
-              {toBengaliNumber(profile.referralCount || 14)} জন
+              {toBengaliNumber(profile.referralCount || realReferrals.length || 0)} জন
             </p>
           </div>
         </div>
@@ -115,43 +132,65 @@ export const ReferTab: React.FC<ReferTabProps> = ({ profile }) => {
           <div>
             <p className="text-[10px] text-slate-400">রেফারেল আয়</p>
             <p className="text-base font-bold text-amber-400 font-mono">
-              {formatTaka((profile.referralCount || 14) * 20)}
+              {formatTaka((profile.referralCount || realReferrals.length || 0) * 20)}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Recent Referral Activity */}
+      {/* REAL Invited Members List (No fake users) */}
       <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-4 shadow-lg space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
             <Award className="w-4 h-4 text-amber-400" />
-            <span>আমন্ত্রিত সদস্যদের তালিকা</span>
+            <span>আমন্ত্রিত সদস্যদের তালিকা (রিয়েল ডেটা)</span>
           </h3>
-          <span className="text-[11px] text-slate-500">সাম্প্রতিক</span>
+          <span className="text-[11px] text-slate-500 font-mono">
+            {toBengaliNumber(realReferrals.length)} জন
+          </span>
         </div>
 
-        <div className="space-y-2">
-          {sampleReferrals.map((ref, idx) => (
-            <div
-              key={idx}
-              className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs"
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[11px] font-bold text-slate-300">
-                  {ref.name[0]}
+        {loadingReferrals ? (
+          <div className="py-6 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+            <span>তালিকা লোড হচ্ছে...</span>
+          </div>
+        ) : realReferrals.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-500 space-y-2">
+            <UserCheck className="w-8 h-8 text-slate-600 mx-auto" />
+            <p className="font-medium text-slate-400">এখনও কোনো সদস্য জয়েন করেনি।</p>
+            <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
+              আপনার বন্ধুদের আমন্ত্রণ জানাতে উপরের "টেলিগ্রামে শেয়ার করুন" বাটনে ক্লিক করুন।
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {realReferrals.map((ref) => (
+              <div
+                key={ref.id || ref.referredUserId}
+                className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[11px] font-bold text-slate-300">
+                    {ref.referredName ? ref.referredName[0] : 'U'}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-200">{ref.referredName}</p>
+                    <p className="text-[10px] text-slate-500 font-mono">
+                      {ref.referredUsername || '@user'} • {new Date(ref.createdAt).toLocaleDateString('bn-BD', {
+                        month: 'short',
+                        day: 'numeric'
+                      })}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold text-slate-200">{ref.name}</p>
-                  <p className="text-[10px] text-slate-500 font-mono">{ref.username} • {ref.date}</p>
-                </div>
+                <span className="font-bold font-mono text-emerald-400">
+                  +{formatTaka(ref.rewardAmount || 20)}
+                </span>
               </div>
-              <span className="font-bold font-mono text-emerald-400">
-                +{formatTaka(ref.reward)}
-              </span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

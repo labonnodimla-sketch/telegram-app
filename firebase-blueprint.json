@@ -26,6 +26,22 @@
       },
       "required": ["userId", "displayName", "balance", "coins", "level", "createdAt"]
     },
+    "Referral": {
+      "title": "Referral",
+      "description": "Record of a successfully referred user",
+      "type": "object",
+      "properties": {
+        "referrerCode": { "type": "string", "description": "Referral code used" },
+        "referrerId": { "type": "string", "description": "User ID of inviter" },
+        "referredUserId": { "type": "string", "description": "User ID of invited user" },
+        "referredName": { "type": "string", "description": "Name of invited user" },
+        "referredUsername": { "type": "string", "description": "Telegram username of invited user" },
+        "rewardAmount": { "type": "number", "description": "Reward in BDT" },
+        "rewardCoins": { "type": "number", "description": "Reward in coins" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["referrerCode", "referredUserId", "referredName", "rewardAmount", "rewardCoins"]
+    },
     "Task": {
       "title": "Task",
       "description": "Available earning task definition",
@@ -81,6 +97,10 @@
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/UserProfile" },
       "description": "User profile records indexed by auth UID"
+    },
+    "/referrals/{referralId}": {
+      "schema": { "$ref": "#/entities/Referral" },
+      "description": "Real recorded referrals linked to referrer codes"
     },
     "/tasks/{taskId}": {
       "schema": { "$ref": "#/entities/Task" },

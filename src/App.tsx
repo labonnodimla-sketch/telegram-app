@@ -7,7 +7,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   auth, 
   authenticateTelegramUser, 
-  loginWithGoogle, 
   logoutUser, 
   testConnection 
 } from './firebase';
@@ -25,7 +24,8 @@ import {
   subscribeToUserWithdrawals,
   completeTaskInFirestore, 
   submitWithdrawalRequest, 
-  seedInitialTasksIfEmpty 
+  seedInitialTasksIfEmpty,
+  processReferralCode
 } from './services/firebaseService';
 import { HeaderCard } from './components/HeaderCard';
 import { TaskCard } from './components/TaskCard';
@@ -43,50 +43,52 @@ import {
   Share2, 
   User as UserIcon, 
   PlayCircle,
-  LogIn,
   LogOut,
   Send
 } from 'lucide-react';
 
-const STORAGE_KEY = 'adearn_user_profile';
+// Use clean storage key so previous fake balances (৳1,500 / 7,500 coins) are reset to 0
+const STORAGE_KEY = 'adearn_user_v3_clean';
 
 function getInitialProfile(): UserProfile {
-  // Check cached profile first
   if (typeof window !== 'undefined') {
     const cached = localStorage.getItem(STORAGE_KEY);
     if (cached) {
       try {
-        return JSON.parse(cached);
+        const parsed = JSON.parse(cached);
+        if (parsed.balance !== undefined) return parsed;
       } catch (e) {
-        // ignore parse error
+        // ignore
       }
     }
   }
 
-  // Detect Telegram WebApp user immediately without waiting
+  // Detect Telegram WebApp user immediately
   const tg = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null;
   const tgUser = tg?.initDataUnsafe?.user;
 
-  const realName = tgUser ? `${tgUser.first_name}${tgUser.last_name ? ' ' + tgUser.last_name : ''}` : 'Anisur Rahman';
-  const username = tgUser?.username ? `@${tgUser.username}` : '@anisur_dev';
+  const realName = tgUser ? `${tgUser.first_name}${tgUser.last_name ? ' ' + tgUser.last_name : ''}` : 'User';
+  const username = tgUser?.username ? `@${tgUser.username}` : '@user';
   const photo = tgUser?.photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
+  const referralCode = 'EARN' + Math.floor(1000 + Math.random() * 9000);
 
+  // STARTING FROM ZERO (০ কয়েন ও ০ টাকা)
   return {
-    userId: tgUser ? `tg_${tgUser.id}` : 'tg_user_1',
+    userId: tgUser ? `tg_${tgUser.id}` : 'user_' + Date.now(),
     telegramId: tgUser?.id,
     displayName: realName,
     photoUrl: photo,
     telegramUsername: username,
-    balance: 1500.0,
-    coins: 7500,
-    level: 12,
-    totalEarned: 12000.0,
-    totalWithdrawn: 10500.0,
-    todayEarned: 75.0,
-    todayVideosWatched: 3,
+    balance: 0.00,       // Starts from 0
+    coins: 0,           // Starts from 0
+    level: 1,           // Starts from 1
+    totalEarned: 0.00,   // Starts from 0
+    totalWithdrawn: 0.00,
+    todayEarned: 0.00,
+    todayVideosWatched: 0,
     dailyVideoLimit: 15,
-    referralCode: 'EARN882',
-    referralCount: 14,
+    referralCode,
+    referralCount: 0,
     createdAt: new Date().toISOString(),
   };
 }
@@ -99,11 +101,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'tasks' | 'withdraw' | 'refer' | 'profile'>('home');
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
   const [isDailyBonusOpen, setIsDailyBonusOpen] = useState(false);
-  const [isDesktopPreview, setIsDesktopPreview] = useState(false);
   const [taskCategoryFilter, setTaskCategoryFilter] = useState<string>('all');
   const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([]);
 
-  // Cache userProfile locally whenever it updates
+  // Cache userProfile locally
   useEffect(() => {
     if (userProfile && typeof window !== 'undefined') {
       try {
@@ -114,12 +115,14 @@ export default function App() {
     }
   }, [userProfile]);
 
-  // Initialize Telegram WebApp
+  // Initialize Telegram WebApp & check for incoming referral link
   useEffect(() => {
     testConnection();
     seedInitialTasksIfEmpty();
 
     const tg = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null;
+    let incomingRefCode: string | null = null;
+
     if (tg) {
       try {
         tg.ready();
@@ -134,9 +137,30 @@ export default function App() {
             telegramId: u.id,
           }));
         }
+
+        // Detect start_param from Telegram referral link (e.g. t.me/bot?start=EARN882 or ?startapp=EARN882)
+        if (tg.initDataUnsafe?.start_param) {
+          incomingRefCode = tg.initDataUnsafe.start_param;
+        }
       } catch (e) {
-        console.log('Telegram WebApp initialization:', e);
+        console.log('Telegram WebApp init:', e);
       }
+    }
+
+    // Fallback: check browser URL query params for ?startapp= or ?ref= or ?start=
+    if (!incomingRefCode && typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      incomingRefCode = params.get('startapp') || params.get('ref') || params.get('start');
+    }
+
+    // Process incoming referral if present
+    if (incomingRefCode) {
+      const cleanCode = incomingRefCode.trim().toUpperCase();
+      processReferralCode(userProfile, cleanCode).then((res) => {
+        if (res.success) {
+          setUserProfile((prev) => ({ ...prev, referredBy: cleanCode }));
+        }
+      });
     }
   }, []);
 
@@ -150,7 +174,6 @@ export default function App() {
           setUserProfile((prev) => ({
             ...prev,
             ...profile,
-            // Keep real Telegram name and photo if detected
             displayName: prev.displayName || profile.displayName,
             photoUrl: prev.photoUrl || profile.photoUrl,
             telegramUsername: prev.telegramUsername || profile.telegramUsername,
@@ -159,7 +182,6 @@ export default function App() {
           console.warn('Background profile sync note:', e);
         }
       } else {
-        // Non-blocking auto sign-in attempt in background
         authenticateTelegramUser().catch((err) => {
           console.warn('Silent auth note:', err);
         });
@@ -169,7 +191,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Listen to Firestore User Profile in real time (if authenticated)
+  // Listen to Firestore User Profile in real time
   useEffect(() => {
     if (!currentUser) return;
     const unsub = subscribeToUserProfile(currentUser.uid, (profile) => {
@@ -198,7 +220,6 @@ export default function App() {
   }, [currentUser]);
 
   const handleCompleteTask = async (task: TaskItem) => {
-    // 1. Immediately update local state so UI gives instant reward feedback!
     const newCoins = userProfile.coins + task.rewardCoins;
     const newBalance = userProfile.balance + task.rewardTaka;
     const newTotalEarned = userProfile.totalEarned + task.rewardTaka;
@@ -207,7 +228,7 @@ export default function App() {
     const newVideosWatched = isVideo
       ? Math.min((userProfile.todayVideosWatched || 0) + 1, userProfile.dailyVideoLimit || 15)
       : userProfile.todayVideosWatched;
-    const newLevel = Math.max(userProfile.level, Math.floor(newCoins / 600) + 1);
+    const newLevel = Math.max(1, Math.floor(newCoins / 500) + 1);
 
     setUserProfile((prev) => ({
       ...prev,
@@ -221,7 +242,6 @@ export default function App() {
 
     setCompletedTaskIds((prev) => [...prev, task.id]);
 
-    // 2. Telegram haptic feedback
     try {
       if ((window as any).Telegram?.WebApp?.HapticFeedback) {
         (window as any).Telegram.WebApp.HapticFeedback.notificationOccurred('success');
@@ -230,7 +250,6 @@ export default function App() {
       // ignore
     }
 
-    // 3. Persist to Firestore in background if online
     if (currentUser) {
       try {
         await completeTaskInFirestore(currentUser.uid, task, userProfile);
@@ -243,7 +262,6 @@ export default function App() {
   const handleWithdrawalSubmit = async (method: PaymentMethod, account: string, amount: number) => {
     const coinsDeducted = Math.round(amount * 5); // ৳১ = ৫ কয়েন
 
-    // 1. Update local state immediately
     const newRequest: WithdrawalRequest = {
       id: 'w_' + Date.now(),
       userId: userProfile.userId,
@@ -264,7 +282,6 @@ export default function App() {
       totalWithdrawn: prev.totalWithdrawn + amount,
     }));
 
-    // 2. Persist to Firestore in background
     if (currentUser) {
       try {
         await submitWithdrawalRequest(
@@ -293,13 +310,9 @@ export default function App() {
   );
 
   return (
-    <TelegramFrame
-      isDesktopPreview={isDesktopPreview}
-      onTogglePreview={() => setIsDesktopPreview(!isDesktopPreview)}
-      telegramUser={userProfile.displayName}
-    >
+    <TelegramFrame>
       <div className="flex-1 flex flex-col bg-slate-950 text-slate-100 overflow-hidden select-none">
-        {/* Top Telegram Mini App Bar */}
+        {/* Top Telegram Mini App Header (Clean - No preview switcher line) */}
         <div className="bg-slate-950/95 border-b border-slate-800/80 px-3.5 py-2.5 flex items-center justify-between z-20 shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-amber-400 to-yellow-500 flex items-center justify-center font-black text-slate-950 text-sm shadow-md">
@@ -337,7 +350,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Main Content - Instant Load (No Infinite Spinner) */}
+        {/* Main Content */}
         <div className="flex-1 overflow-y-auto px-3.5 py-3 space-y-4 pb-20">
           {/* Top Golden Profile Header Card */}
           {activeTab !== 'profile' && (
@@ -350,7 +363,7 @@ export default function App() {
           {/* HOME TAB CONTENT */}
           {activeTab === 'home' && (
             <>
-              {/* Vibrant Banner: "আজকের কাজ" matching screenshot */}
+              {/* Vibrant Banner: "আজকের কাজ" */}
               <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-500 p-4 shadow-xl border border-sky-400/30">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
 
@@ -383,7 +396,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Section Header: "বিজ্ঞাপন দেখে আয়" matching screenshot */}
+              {/* Section Header: "বিজ্ঞাপন দেখে আয়" */}
               <div className="space-y-2 pt-1">
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-base text-white tracking-wide flex items-center gap-1.5">
@@ -467,7 +480,7 @@ export default function App() {
             />
           )}
 
-          {/* REFER TAB CONTENT */}
+          {/* REFER TAB CONTENT (100% Real Logic) */}
           {activeTab === 'refer' && (
             <ReferTab profile={userProfile} />
           )}
