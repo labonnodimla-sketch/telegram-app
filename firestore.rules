@@ -1,0 +1,62 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // User Profile
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId &&
+        request.resource.data.userId == userId &&
+        request.resource.data.displayName is string && request.resource.data.displayName.size() <= 100 &&
+        request.resource.data.balance is number &&
+        request.resource.data.coins is number;
+      allow update: if isSignedIn() && request.auth.uid == userId &&
+        request.resource.data.userId == resource.data.userId;
+      allow delete: if false;
+    }
+
+    // Tasks collection - public catalog
+    match /tasks/{taskId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Task Completions
+    match /completions/{completionId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid &&
+        request.resource.data.taskId is string &&
+        request.resource.data.rewardCoins is number;
+      allow update, delete: if false;
+    }
+
+    // Withdrawals (bKash & Nagad)
+    match /withdrawals/{withdrawalId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid &&
+        (request.resource.data.method == "bkash" || request.resource.data.method == "nagad") &&
+        request.resource.data.amount is number &&
+        request.resource.data.accountNumber is string && request.resource.data.accountNumber.size() <= 20;
+      allow update, delete: if false;
+    }
+  }
+}

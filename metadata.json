@@ -1,0 +1,6 @@
+{
+  "name": "AdEarn - Telegram Mini App",
+  "description": "Telegram Mini App where users complete video ads, sponsor tasks, and surveys to earn real rewards (৳ / coins) stored in Firebase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

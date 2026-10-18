@@ -1,0 +1,98 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile information, coins, balance, and stats",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Auth UID of the user" },
+        "displayName": { "type": "string", "description": "Display name of the user" },
+        "photoUrl": { "type": "string", "description": "Avatar photo URL" },
+        "telegramUsername": { "type": "string", "description": "Telegram username or identifier" },
+        "balance": { "type": "number", "description": "Current balance in BDT" },
+        "coins": { "type": "number", "description": "Current coins earned" },
+        "level": { "type": "number", "description": "Current level of user" },
+        "totalEarned": { "type": "number", "description": "Total lifetime earnings in BDT" },
+        "totalWithdrawn": { "type": "number", "description": "Total amount withdrawn in BDT" },
+        "todayEarned": { "type": "number", "description": "Earnings accumulated today in BDT" },
+        "todayVideosWatched": { "type": "number", "description": "Count of videos watched today" },
+        "dailyVideoLimit": { "type": "number", "description": "Daily video limit" },
+        "referralCode": { "type": "string", "description": "Unique user referral code" },
+        "referredBy": { "type": "string", "description": "Referral code of inviter" },
+        "referralCount": { "type": "number", "description": "Total number of users referred" },
+        "lastBonusDate": { "type": "string", "description": "Date string of last daily bonus" },
+        "createdAt": { "type": "string", "description": "Account creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Account update timestamp" }
+      },
+      "required": ["userId", "displayName", "balance", "coins", "level", "createdAt"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Available earning task definition",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Bengali/English title of the task" },
+        "description": { "type": "string", "description": "Task description or instruction" },
+        "category": { "type": "string", "description": "video, sponsor, survey, social, daily" },
+        "rewardCoins": { "type": "number", "description": "Reward in coins" },
+        "rewardTaka": { "type": "number", "description": "Reward in BDT" },
+        "durationSeconds": { "type": "number", "description": "Duration to wait or watch" },
+        "actionUrl": { "type": "string", "description": "Target video or task link" },
+        "actionText": { "type": "string", "description": "Button label" },
+        "icon": { "type": "string", "description": "Icon identifier" },
+        "isActive": { "type": "boolean", "description": "Whether task is active" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["title", "category", "rewardCoins", "rewardTaka", "isActive"]
+    },
+    "TaskCompletion": {
+      "title": "TaskCompletion",
+      "description": "Record of a task completed by a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "User who completed the task" },
+        "taskId": { "type": "string", "description": "ID of completed task" },
+        "taskTitle": { "type": "string", "description": "Title of the task" },
+        "rewardCoins": { "type": "number", "description": "Coins rewarded" },
+        "rewardTaka": { "type": "number", "description": "BDT rewarded" },
+        "status": { "type": "string", "description": "Completion status" },
+        "completedAt": { "type": "string", "description": "Timestamp when completed" }
+      },
+      "required": ["userId", "taskId", "rewardCoins", "status"]
+    },
+    "Withdrawal": {
+      "title": "Withdrawal",
+      "description": "Payout withdrawal request via bKash or Nagad",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "User ID requesting withdrawal" },
+        "userName": { "type": "string", "description": "User display name" },
+        "method": { "type": "string", "description": "bkash or nagad only", "enum": ["bkash", "nagad"] },
+        "accountNumber": { "type": "string", "description": "Target mobile number" },
+        "amount": { "type": "number", "description": "Amount in BDT" },
+        "coinsDeducted": { "type": "number", "description": "Coins deducted" },
+        "status": { "type": "string", "description": "pending, approved, rejected" },
+        "createdAt": { "type": "string", "description": "Request creation timestamp" }
+      },
+      "required": ["userId", "userName", "method", "accountNumber", "amount", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile records indexed by auth UID"
+    },
+    "/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/Task" },
+      "description": "Public catalog of earning tasks"
+    },
+    "/completions/{completionId}": {
+      "schema": { "$ref": "#/entities/TaskCompletion" },
+      "description": "User task completion logs"
+    },
+    "/withdrawals/{withdrawalId}": {
+      "schema": { "$ref": "#/entities/Withdrawal" },
+      "description": "Withdrawal payout requests for bKash and Nagad"
+    }
+  }
+}
