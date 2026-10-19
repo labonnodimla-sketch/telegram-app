@@ -23,15 +23,7 @@ service cloud.firestore {
     // User Profile
     match /users/{userId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.auth.uid == userId &&
-        request.resource.data.userId == userId &&
-        request.resource.data.balance is number &&
-        request.resource.data.coins is number;
-      allow update: if isSignedIn() && (
-        request.auth.uid == userId ||
-        // Allow updating referral stats by a referred user
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['referralCount', 'coins', 'balance', 'totalEarned', 'updatedAt'])
-      );
+      allow create, update: if isSignedIn();
       allow delete: if false;
     }
 

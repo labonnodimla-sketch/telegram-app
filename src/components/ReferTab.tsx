@@ -11,7 +11,8 @@ import {
   Sparkles, 
   TrendingUp, 
   Award,
-  UserCheck
+  UserCheck,
+  Send
 } from 'lucide-react';
 
 interface ReferTabProps {
@@ -34,14 +35,14 @@ export const ReferTab: React.FC<ReferTabProps> = ({ profile }) => {
     return () => unsub();
   }, [profile.referralCode]);
 
-  // Construct real Telegram Mini App startapp referral link and fallback web link
-  const botUsername = 'AdEarnMiniApp_bot';
+  // Real Bot Username provided by user: @adearnminibot
+  const botUsername = 'adearnminibot';
+  
+  // Telegram Bot Referral Link (Universal format supported by all Telegram clients)
   const telegramReferralLink = `https://t.me/${botUsername}?start=${profile.referralCode || 'EARN1000'}`;
   
-  // Web app direct link with ?startapp= or ?ref=
-  const webReferralLink = typeof window !== 'undefined'
-    ? `${window.location.origin}${window.location.pathname}?startapp=${profile.referralCode || 'EARN1000'}`
-    : telegramReferralLink;
+  // Direct Mini App deep link
+  const miniAppDirectLink = `https://t.me/${botUsername}/app?startapp=${profile.referralCode || 'EARN1000'}`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(telegramReferralLink);
@@ -62,7 +63,7 @@ export const ReferTab: React.FC<ReferTabProps> = ({ profile }) => {
         <div className="relative z-10 space-y-2">
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-semibold">
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>রেফারেল প্রোগ্রাম</span>
+            <span>রেফারেল প্রোগ্রাম (@{botUsername})</span>
           </div>
 
           <h2 className="text-xl font-bold text-white">
@@ -70,7 +71,7 @@ export const ReferTab: React.FC<ReferTabProps> = ({ profile }) => {
           </h2>
 
           <p className="text-xs text-slate-300 leading-relaxed max-w-xs">
-            আপনার ইউনিক রেফারেল লিংক বন্ধুদের পাঠান। তারা এই লিংকে মিনি অ্যাপ চালু করলেই সাথে সাথে আপনার অ্যাকাউন্টে টাকা ও কয়েন যোগ হবে!
+            আপনার ইউনিক রেফারেল লিংক বন্ধুদের পাঠান। তারা টেলিগ্রামে এই লিংকে বট চালু করলেই সাথে সাথে আপনার অ্যাকাউন্টে টাকা ও কয়েন যোগ হবে!
           </p>
         </div>
       </div>
@@ -100,13 +101,14 @@ export const ReferTab: React.FC<ReferTabProps> = ({ profile }) => {
           </button>
         </div>
 
+        {/* Telegram Direct Share CTA */}
         <a
           href={`https://t.me/share/url?url=${encodeURIComponent(telegramReferralLink)}&text=${encodeURIComponent(shareText)}`}
           target="_blank"
           rel="noreferrer"
           className="w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-98 shadow-md shadow-sky-950/30 cursor-pointer"
         >
-          <Share2 className="w-3.5 h-3.5" />
+          <Send className="w-3.5 h-3.5" />
           <span>টেলিগ্রামে বন্ধুদের সাথে শেয়ার করুন</span>
         </a>
       </div>
@@ -138,7 +140,7 @@ export const ReferTab: React.FC<ReferTabProps> = ({ profile }) => {
         </div>
       </div>
 
-      {/* REAL Invited Members List (No fake users) */}
+      {/* REAL Invited Members List */}
       <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-4 shadow-lg space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
@@ -160,7 +162,7 @@ export const ReferTab: React.FC<ReferTabProps> = ({ profile }) => {
             <UserCheck className="w-8 h-8 text-slate-600 mx-auto" />
             <p className="font-medium text-slate-400">এখনও কোনো সদস্য জয়েন করেনি।</p>
             <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
-              আপনার বন্ধুদের আমন্ত্রণ জানাতে উপরের "টেলিগ্রামে শেয়ার করুন" বাটনে ক্লিক করুন।
+              আপনার বন্ধুদের আমন্ত্রণ জানাতে উপরের "টেলিগ্রামে বন্ধুদের সাথে শেয়ার করুন" বাটনে ক্লিক করুন।
             </p>
           </div>
         ) : (

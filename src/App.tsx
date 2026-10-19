@@ -138,7 +138,7 @@ export default function App() {
           }));
         }
 
-        // Detect start_param from Telegram referral link (e.g. t.me/bot?start=EARN882 or ?startapp=EARN882)
+        // Detect start_param from Telegram referral link (e.g. t.me/adearnminibot?start=EARN882 or ?startapp=EARN882)
         if (tg.initDataUnsafe?.start_param) {
           incomingRefCode = tg.initDataUnsafe.start_param;
         }
@@ -153,14 +153,10 @@ export default function App() {
       incomingRefCode = params.get('startapp') || params.get('ref') || params.get('start');
     }
 
-    // Process incoming referral if present
-    if (incomingRefCode) {
+    // Store pending referral code in session
+    if (incomingRefCode && typeof window !== 'undefined') {
       const cleanCode = incomingRefCode.trim().toUpperCase();
-      processReferralCode(userProfile, cleanCode).then((res) => {
-        if (res.success) {
-          setUserProfile((prev) => ({ ...prev, referredBy: cleanCode }));
-        }
-      });
+      sessionStorage.setItem('pending_ref_code', cleanCode);
     }
   }, []);
 
@@ -178,6 +174,18 @@ export default function App() {
             photoUrl: prev.photoUrl || profile.photoUrl,
             telegramUsername: prev.telegramUsername || profile.telegramUsername,
           }));
+
+          // Process pending referral code now that Firestore user is authenticated!
+          if (typeof window !== 'undefined') {
+            const pending = sessionStorage.getItem('pending_ref_code');
+            if (pending && !profile.referredBy && profile.referralCode !== pending) {
+              sessionStorage.removeItem('pending_ref_code');
+              const res = await processReferralCode(profile, pending);
+              if (res.success) {
+                setUserProfile((prev) => ({ ...prev, referredBy: pending }));
+              }
+            }
+          }
         } catch (e) {
           console.warn('Background profile sync note:', e);
         }
