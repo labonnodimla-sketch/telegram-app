@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
 import { toBengaliNumber, formatTaka } from '../data/defaultTasks';
-import { claimDailyReward } from '../services/firebaseService';
 import confetti from 'canvas-confetti';
 import { X, Gift, Sparkles, CheckCircle2, Coins } from 'lucide-react';
 
@@ -9,12 +8,14 @@ interface DailyBonusModalProps {
   isOpen: boolean;
   onClose: () => void;
   profile: UserProfile;
+  onClaimBonus: (bonusCoins: number, bonusTaka: number) => Promise<void> | void;
 }
 
 export const DailyBonusModal: React.FC<DailyBonusModalProps> = ({
   isOpen,
   onClose,
   profile,
+  onClaimBonus,
 }) => {
   const [opened, setOpened] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -30,8 +31,11 @@ export const DailyBonusModal: React.FC<DailyBonusModalProps> = ({
     try {
       const bonusCoins = 25;
       const bonusTaka = 5;
-      await claimDailyReward(profile.userId, bonusCoins, bonusTaka, profile);
+      
+      // Immediately call parent handler to update profile & balance in state!
+      await onClaimBonus(bonusCoins, bonusTaka);
       setOpened(true);
+
       confetti({
         particleCount: 80,
         spread: 70,
@@ -39,7 +43,7 @@ export const DailyBonusModal: React.FC<DailyBonusModalProps> = ({
         colors: ['#f59e0b', '#fbbf24', '#10b981', '#6366f1'],
       });
     } catch (e) {
-      console.error(e);
+      console.error('Error claiming daily bonus:', e);
     } finally {
       setLoading(false);
     }
@@ -50,14 +54,14 @@ export const DailyBonusModal: React.FC<DailyBonusModalProps> = ({
       <div className="relative w-full max-w-xs rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-500/40 p-5 shadow-2xl text-center space-y-4">
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 p-1 rounded-full text-slate-400 hover:text-white"
+          className="absolute top-3 right-3 p-1 rounded-full text-slate-400 hover:text-white cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
 
         <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-300 p-0.5 mx-auto shadow-lg shadow-amber-500/20">
           <div className="w-full h-full rounded-2xl bg-slate-950 flex items-center justify-center text-amber-400">
-            <Gift className={`w-8 h-8 ${opened ? 'text-emerald-400' : 'animate-bounce'}`} />
+            <Gift className={`w-8 h-8 ${opened || alreadyClaimed ? 'text-emerald-400' : 'animate-bounce'}`} />
           </div>
         </div>
 
@@ -66,7 +70,7 @@ export const DailyBonusModal: React.FC<DailyBonusModalProps> = ({
             {alreadyClaimed || opened ? 'আজকের বোনাস গ্রহণ সম্পন্ন!' : 'দৈনিক ফ্রি লাকি উপহার'}
           </h3>
           <p className="text-xs text-slate-400">
-            প্রতিদিন মিনি অ্যাপ ওপেন করে ফ্রি কয়েন ও টাকা ক্লেইম করুন।
+            প্রতিদিন মিনি অ্যাপ ওপেন করে ফ্রি কয়েন ও টাকা দাবি করুন।
           </p>
         </div>
 
@@ -76,16 +80,16 @@ export const DailyBonusModal: React.FC<DailyBonusModalProps> = ({
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
               <span>+২৫ কয়েন (৳৫.০০) যোগ হয়েছে!</span>
             </p>
-            <p className="text-[10px] text-slate-400">আগামীকাল আবার ক্লেইম করতে পারবেন।</p>
+            <p className="text-[10px] text-slate-400">আগামীকাল আবার দাবি করতে পারবেন।</p>
           </div>
         ) : (
           <button
             onClick={handleClaim}
             disabled={loading}
-            className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+            className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
           >
             <Sparkles className="w-4 h-4" />
-            <span>{loading ? 'ক্লেইম হচ্ছে...' : 'এখনই ক্লেইম করুন'}</span>
+            <span>{loading ? 'ক্লেইম হচ্ছে...' : 'এখনই দাবি করুন'}</span>
           </button>
         )}
       </div>

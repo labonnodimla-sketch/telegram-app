@@ -25,7 +25,8 @@ import {
   completeTaskInFirestore, 
   submitWithdrawalRequest, 
   seedInitialTasksIfEmpty,
-  processReferralCode
+  processReferralCode,
+  claimDailyReward
 } from './services/firebaseService';
 import { HeaderCard } from './components/HeaderCard';
 import { TaskCard } from './components/TaskCard';
@@ -267,6 +268,34 @@ export default function App() {
     }
   };
 
+  const handleClaimDailyBonus = async (bonusCoins: number, bonusTaka: number) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    setUserProfile((prev) => ({
+      ...prev,
+      coins: prev.coins + bonusCoins,
+      balance: prev.balance + bonusTaka,
+      todayEarned: prev.todayEarned + bonusTaka,
+      totalEarned: prev.totalEarned + bonusTaka,
+      lastBonusDate: todayStr,
+    }));
+
+    if (currentUser) {
+      try {
+        await claimDailyReward(currentUser.uid, bonusCoins, bonusTaka, userProfile);
+      } catch (e) {
+        console.warn('Daily reward persist:', e);
+      }
+    }
+  };
+
+  const handleApplyReferralCode = async (code: string) => {
+    const res = await processReferralCode(userProfile, code);
+    if (res.success) {
+      setUserProfile((prev) => ({ ...prev, referredBy: code }));
+    }
+    return res;
+  };
+
   const handleWithdrawalSubmit = async (method: PaymentMethod, account: string, amount: number) => {
     const coinsDeducted = Math.round(amount * 5); // ৳১ = ৫ কয়েন
 
@@ -490,7 +519,10 @@ export default function App() {
 
           {/* REFER TAB CONTENT (100% Real Logic) */}
           {activeTab === 'refer' && (
-            <ReferTab profile={userProfile} />
+            <ReferTab
+              profile={userProfile}
+              onApplyReferralCode={handleApplyReferralCode}
+            />
           )}
 
           {/* PROFILE TAB CONTENT */}
@@ -565,6 +597,7 @@ export default function App() {
           isOpen={isDailyBonusOpen}
           onClose={() => setIsDailyBonusOpen(false)}
           profile={userProfile}
+          onClaimBonus={handleClaimDailyBonus}
         />
       </div>
     </TelegramFrame>

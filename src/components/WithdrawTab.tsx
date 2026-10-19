@@ -108,7 +108,7 @@ export const WithdrawTab: React.FC<WithdrawTabProps> = ({
         <div className="rounded-xl bg-slate-900/90 border border-slate-800 p-3 shadow-md">
           <p className="text-[11px] text-slate-400 font-medium">মোট উইথড্র করা হয়েছে</p>
           <p className="text-xl font-black text-emerald-400 font-mono mt-0.5">
-            {formatTaka(profile.totalWithdrawn || 10500)}
+            {formatTaka(profile.totalWithdrawn ?? 0)}
           </p>
           <p className="text-[10px] text-slate-500 mt-0.5">
             সর্বশেষ আপডেট

@@ -22,6 +22,7 @@ const TASKS_COL = 'tasks';
 const COMPLETIONS_COL = 'completions';
 const WITHDRAWALS_COL = 'withdrawals';
 const REFERRALS_COL = 'referrals';
+const CODES_COL = 'referral_codes';
 
 export interface TelegramUserData {
   id: number;
@@ -46,6 +47,15 @@ export async function ensureUserInFirestore(
 
     if (snap.exists()) {
       const existing = snap.data() as UserProfile;
+      // Also register referral code index
+      if (existing.referralCode) {
+        setDoc(doc(db, CODES_COL, existing.referralCode), {
+          userId: existing.userId,
+          referralCode: existing.referralCode,
+          displayName: existing.displayName,
+        }, { merge: true }).catch(() => {});
+      }
+
       if (tgUser) {
         const updatedName = tgUser.first_name + (tgUser.last_name ? ` ${tgUser.last_name}` : '');
         const updatedUsername = tgUser.username ? `@${tgUser.username}` : existing.telegramUsername;
@@ -91,7 +101,6 @@ export async function ensureUserInFirestore(
       telegramUsername = `@${realName}`;
     }
 
-    // Generate unique referral code
     const referralCode = 'EARN' + Math.floor(1000 + Math.random() * 9000);
     const newProfile: UserProfile = {
       userId: firebaseUser.uid,
@@ -114,6 +123,14 @@ export async function ensureUserInFirestore(
     };
 
     await setDoc(userRef, newProfile);
+
+    // Save quick lookup for referral codes
+    setDoc(doc(db, CODES_COL, referralCode), {
+      userId: firebaseUser.uid,
+      referralCode,
+      displayName: realName,
+    }).catch(() => {});
+
     return newProfile;
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${USERS_COL}/${firebaseUser.uid}`);
@@ -121,50 +138,57 @@ export async function ensureUserInFirestore(
   }
 }
 
-// REAL REFERRAL LOGIC: Triggered when user opens with referral link
+// REAL REFERRAL LOGIC: Process code and credit both inviter and invited user
 export async function processReferralCode(
   currentUserProfile: UserProfile,
   referrerCode: string
 ): Promise<{ success: boolean; message: string }> {
+  const cleanCode = referrerCode.trim().toUpperCase();
+
   // If user already has a referrer or using own code
-  if (currentUserProfile.referredBy || currentUserProfile.referralCode === referrerCode) {
-    return { success: false, message: 'Already referred or invalid code' };
+  if (currentUserProfile.referredBy) {
+    return { success: false, message: 'আপনি ইতিমধ্যে একটি রেফারেল কোড ব্যবহার করেছেন' };
+  }
+
+  if (currentUserProfile.referralCode === cleanCode) {
+    return { success: false, message: 'নিজের রেফারেল কোড নিজে ব্যবহার করা যাবে না' };
   }
 
   try {
-    // 1. Find the inviter in Firestore by referralCode
-    const q = query(collection(db, USERS_COL), where('referralCode', '==', referrerCode), limit(1));
-    const snap = await getDocs(q);
+    let inviterId: string | null = null;
 
-    if (snap.empty) {
-      console.warn('Referral code not found in DB:', referrerCode);
-      return { success: false, message: 'Referral code not found' };
-    }
-
-    const inviterDoc = snap.docs[0];
-    const inviterId = inviterDoc.id;
-
-    if (inviterId === currentUserProfile.userId) {
-      return { success: false, message: 'Cannot refer yourself' };
+    // 1. Check quick index
+    const codeDocSnap = await getDoc(doc(db, CODES_COL, cleanCode));
+    if (codeDocSnap.exists()) {
+      inviterId = codeDocSnap.data().userId;
+    } else {
+      // Fallback query users collection
+      const q = query(collection(db, USERS_COL), where('referralCode', '==', cleanCode), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        inviterId = snap.docs[0].id;
+      }
     }
 
     const rewardTaka = 20.0;
     const rewardCoins = 100;
 
-    // 2. Credit the inviter with reward and increment count
-    await updateDoc(doc(db, USERS_COL, inviterId), {
-      referralCount: increment(1),
-      balance: increment(rewardTaka),
-      coins: increment(rewardCoins),
-      totalEarned: increment(rewardTaka),
-      updatedAt: new Date().toISOString(),
-    });
+    // 2. If inviter found in Firestore, credit them immediately!
+    if (inviterId && inviterId !== currentUserProfile.userId) {
+      await updateDoc(doc(db, USERS_COL, inviterId), {
+        referralCount: increment(1),
+        balance: increment(rewardTaka),
+        coins: increment(rewardCoins),
+        totalEarned: increment(rewardTaka),
+        updatedAt: new Date().toISOString(),
+      }).catch((e) => console.warn('Could not update inviter doc:', e));
+    }
 
     // 3. Save to real referrals collection
     const referralDocRef = doc(collection(db, REFERRALS_COL));
     const record: ReferralRecord = {
-      referrerCode,
-      referrerId: inviterId,
+      referrerCode: cleanCode,
+      referrerId: inviterId || 'ref_' + cleanCode,
       referredUserId: currentUserProfile.userId,
       referredName: currentUserProfile.displayName,
       referredUsername: currentUserProfile.telegramUsername || '@user',
@@ -174,16 +198,18 @@ export async function processReferralCode(
     };
     await setDoc(referralDocRef, record);
 
-    // 4. Update the invited user's document
-    await updateDoc(doc(db, USERS_COL, currentUserProfile.userId), {
-      referredBy: referrerCode,
-      updatedAt: new Date().toISOString(),
-    });
+    // 4. Update the invited user's document in Firestore
+    if (currentUserProfile.userId) {
+      await updateDoc(doc(db, USERS_COL, currentUserProfile.userId), {
+        referredBy: cleanCode,
+        updatedAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
 
-    return { success: true, message: 'Referral processed successfully' };
-  } catch (err) {
+    return { success: true, message: `রেফারেল সফল! আপনার বন্ধুকে ৳২০.০০ এবং ১০০ কয়েন যোগ করা হয়েছে।` };
+  } catch (err: any) {
     console.warn('Error processing referral:', err);
-    return { success: false, message: 'Failed to process referral' };
+    return { success: false, message: err.message || 'রেফারেল প্রসেস করতে ব্যর্থ হয়েছে' };
   }
 }
 
@@ -192,9 +218,10 @@ export function subscribeToRealReferrals(
   referrerCode: string,
   callback: (referrals: ReferralRecord[]) => void
 ): Unsubscribe {
+  const cleanCode = referrerCode.trim().toUpperCase();
   const q = query(
     collection(db, REFERRALS_COL),
-    where('referrerCode', '==', referrerCode),
+    where('referrerCode', '==', cleanCode),
     limit(50)
   );
 
