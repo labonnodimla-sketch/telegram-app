@@ -11,27 +11,18 @@ import {
   TrendingUp, 
   Award,
   UserCheck,
-  Send,
-  UserPlus,
-  AlertCircle,
-  ExternalLink
+  Send
 } from 'lucide-react';
 
 interface ReferTabProps {
   profile: UserProfile;
-  onApplyReferralCode: (code: string) => Promise<{ success: boolean; message: string }>;
+  onApplyReferralCode?: (code: string) => Promise<{ success: boolean; message: string }>;
 }
 
-export const ReferTab: React.FC<ReferTabProps> = ({ profile, onApplyReferralCode }) => {
-  const [copied, setCopied] = useState(false);
+export const ReferTab: React.FC<ReferTabProps> = ({ profile }) => {
   const [copiedApp, setCopiedApp] = useState(false);
   const [realReferrals, setRealReferrals] = useState<ReferralRecord[]>([]);
   const [loadingReferrals, setLoadingReferrals] = useState(true);
-
-  // Manual referral code entry state
-  const [manualCode, setManualCode] = useState('');
-  const [applyingCode, setApplyingCode] = useState(false);
-  const [applyResult, setApplyResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Subscribe to REAL referrals from Firestore
   useEffect(() => {
@@ -46,40 +37,13 @@ export const ReferTab: React.FC<ReferTabProps> = ({ profile, onApplyReferralCode
 
   const botUsername = 'adearnminibot';
   
-  // Telegram Bot Referral Link (Universal format)
-  const telegramBotLink = `https://t.me/${botUsername}?start=${profile.referralCode || 'EARN1000'}`;
-  
   // Direct Mini App deep link
   const miniAppDirectLink = `https://t.me/${botUsername}/app?startapp=${profile.referralCode || 'EARN1000'}`;
-
-  const handleCopyBotLink = () => {
-    navigator.clipboard.writeText(telegramBotLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   const handleCopyMiniAppLink = () => {
     navigator.clipboard.writeText(miniAppDirectLink);
     setCopiedApp(true);
     setTimeout(() => setCopiedApp(false), 2000);
-  };
-
-  const handleManualSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualCode.trim()) return;
-    setApplyingCode(true);
-    setApplyResult(null);
-    try {
-      const res = await onApplyReferralCode(manualCode.trim().toUpperCase());
-      setApplyResult(res);
-      if (res.success) {
-        setManualCode('');
-      }
-    } catch (err: any) {
-      setApplyResult({ success: false, message: err.message || 'কোড যাচাই করা সম্ভব হয়নি' });
-    } finally {
-      setApplyingCode(false);
-    }
   };
 
   const shareText = `AdEarn Mini App-এ বিজ্ঞাপন ও ভিডিও দেখে প্রতিদিন বিকাশ ও নগদে টাকা ইনকাম করুন! আমার রেফারেল লিংকে জয়েন করলেই পাবেন ফ্রি বোনাস: ${miniAppDirectLink}`;
@@ -103,58 +67,10 @@ export const ReferTab: React.FC<ReferTabProps> = ({ profile, onApplyReferralCode
           </h2>
 
           <p className="text-xs text-slate-300 leading-relaxed max-w-xs">
-            আপনার রেফারেল কোড বা লিংক বন্ধুদের পাঠান। তারা মিনি অ্যাপে এই কোডটি দিলেই সাথে সাথে আপনার অ্যাকাউন্টে টাকা ও কয়েন যোগ হবে!
+            আপনার রেফারেল কোড বা লিংক বন্ধুদের পাঠান। তারা আপনার লিংকে জয়েন করলেই সাথে সাথে আপনার অ্যাকাউন্টে টাকা ও কয়েন যোগ হবে!
           </p>
         </div>
       </div>
-
-      {/* Manual Referral Code Input (Friends can paste code) */}
-      {!profile.referredBy ? (
-        <div className="rounded-2xl bg-slate-900/90 border border-amber-500/30 p-4 shadow-lg space-y-3">
-          <div className="flex items-center gap-2 text-xs font-semibold text-amber-300">
-            <UserPlus className="w-4 h-4 text-amber-400" />
-            <span>কারো রেফারেল কোড থাকলে এখানে দিন:</span>
-          </div>
-
-          {applyResult && (
-            <div
-              className={`p-2.5 rounded-xl text-xs flex items-center gap-2 ${
-                applyResult.success
-                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/40'
-                  : 'bg-rose-950/80 text-rose-300 border border-rose-500/40'
-              }`}
-            >
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{applyResult.message}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleManualSubmit} className="flex gap-2">
-            <input
-              type="text"
-              value={manualCode}
-              onChange={(e) => setManualCode(e.target.value)}
-              placeholder="যেমন: EARN882"
-              className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-600 text-xs font-mono uppercase focus:outline-none focus:border-amber-400"
-            />
-            <button
-              type="submit"
-              disabled={applyingCode || !manualCode.trim()}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50 shrink-0"
-            >
-              {applyingCode ? 'যাচাই হচ্ছে...' : 'কোড জমা দিন'}
-            </button>
-          </form>
-        </div>
-      ) : (
-        <div className="p-3 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2 text-emerald-300">
-            <Check className="w-4 h-4 text-emerald-400" />
-            <span>আপনি রেফারেল কোড ব্যবহার করেছেন:</span>
-          </div>
-          <span className="font-mono font-bold text-emerald-400">{profile.referredBy}</span>
-        </div>
-      )}
 
       {/* Share / Copy Box */}
       <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-4 shadow-lg space-y-3">
