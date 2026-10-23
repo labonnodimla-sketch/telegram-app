@@ -5,7 +5,9 @@ import {
   TrendingUp, 
   ArrowDownLeft, 
   Gift, 
-  ShieldCheck
+  ShieldCheck,
+  Copy,
+  Check
 } from 'lucide-react';
 
 interface ProfileTabProps {
@@ -17,6 +19,15 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
   profile,
   onOpenDailyBonus,
 }) => {
+  const [copiedUid, setCopiedUid] = React.useState(false);
+
+  // Compute unique display UID (Telegram numeric ID or unique device ID)
+  const displayUid = profile.telegramId 
+    ? String(profile.telegramId)
+    : (profile.userId?.startsWith('tg_') 
+        ? profile.userId.replace('tg_', '') 
+        : (profile.userId || 'UID-1001'));
+
   // Chart points reflecting real earnings, starting from 0
   const currentTotal = profile.totalEarned ?? 0;
   const isZero = currentTotal === 0;
@@ -190,11 +201,29 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
             <span className="text-slate-400">টেলিগ্রাম ইউজারনেম</span>
             <span className="font-mono text-slate-200">{profile.telegramUsername || '@user'}</span>
           </div>
-          <div className="flex justify-between py-1 border-b border-slate-800">
+          <div className="flex justify-between items-center py-1.5 border-b border-slate-800">
             <span className="text-slate-400">ইউজার আইডি (UID)</span>
-            <span className="font-mono text-slate-400 truncate max-w-[160px]">
-              {profile.userId}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono font-bold text-amber-300 text-xs tracking-wider">
+                {displayUid}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(displayUid);
+                  setCopiedUid(true);
+                  setTimeout(() => setCopiedUid(false), 2000);
+                }}
+                className="text-slate-500 hover:text-amber-400 transition-colors p-0.5 cursor-pointer"
+                title="UID কপি করুন"
+              >
+                {copiedUid ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </div>
           </div>
           <div className="flex justify-between py-1 border-b border-slate-800">
             <span className="text-slate-400">অ্যাকাউন্ট স্ট্যাটাস</span>

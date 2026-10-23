@@ -61,7 +61,7 @@ export async function ensureUserInFirestore(
         const updatedUsername = tgUser.username ? `@${tgUser.username}` : existing.telegramUsername;
         const updatedPhoto = tgUser.photo_url || existing.photoUrl;
 
-        if (existing.displayName !== updatedName || existing.telegramUsername !== updatedUsername) {
+        if (existing.displayName !== updatedName || existing.telegramUsername !== updatedUsername || !existing.telegramId) {
           await updateDoc(userRef, {
             displayName: updatedName,
             telegramUsername: updatedUsername,
@@ -101,7 +101,9 @@ export async function ensureUserInFirestore(
       telegramUsername = `@${realName}`;
     }
 
-    const referralCode = 'EARN' + Math.floor(1000 + Math.random() * 9000);
+    const referralCode = tgUser 
+      ? ('TG' + String(tgUser.id).slice(-4) + Math.floor(10 + Math.random() * 90))
+      : ('EARN' + Math.floor(1000 + Math.random() * 9000));
     const newProfile: UserProfile = {
       userId: firebaseUser.uid,
       telegramId,

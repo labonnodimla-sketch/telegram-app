@@ -48,16 +48,74 @@ import {
   Send
 } from 'lucide-react';
 
-// Use clean storage key so previous fake balances (৳1,500 / 7,500 coins) are reset to 0
-const STORAGE_KEY = 'adearn_user_v3_clean';
+// Clean and isolate storage keys per user so users never share profiles or IDs
+const LEGACY_STORAGE_KEYS = ['adearn_user_v3_clean', 'adearn_user_v2', 'adearn_user_v1'];
+
+function getTelegramUser() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const tg = (window as any).Telegram?.WebApp;
+    if (tg?.initDataUnsafe?.user?.id) {
+      return tg.initDataUnsafe.user;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null;
+}
+
+function getUniqueBrowserDeviceId(): string {
+  if (typeof window === 'undefined') return 'UID' + Math.floor(10000000 + Math.random() * 90000000);
+  try {
+    let devId = localStorage.getItem('adearn_browser_device_uid');
+    if (!devId || devId.length < 5) {
+      devId = 'UID' + Math.floor(10000000 + Math.random() * 90000000);
+      localStorage.setItem('adearn_browser_device_uid', devId);
+    }
+    return devId;
+  } catch (e) {
+    return 'UID' + Math.floor(10000000 + Math.random() * 90000000);
+  }
+}
+
+function getUserStorageKey(tgUser?: any): string {
+  if (tgUser?.id) {
+    return `adearn_profile_tg_${tgUser.id}`;
+  }
+  const devId = getUniqueBrowserDeviceId();
+  return `adearn_profile_web_${devId}`;
+}
 
 function getInitialProfile(): UserProfile {
+  // Wipe out legacy shared keys to prevent ID crossover
   if (typeof window !== 'undefined') {
-    const cached = localStorage.getItem(STORAGE_KEY);
+    LEGACY_STORAGE_KEYS.forEach((k) => {
+      try {
+        localStorage.removeItem(k);
+      } catch (e) {}
+    });
+  }
+
+  const tgUser = getTelegramUser();
+  const storageKey = getUserStorageKey(tgUser);
+
+  if (typeof window !== 'undefined') {
+    const cached = localStorage.getItem(storageKey);
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (parsed.balance !== undefined) return parsed;
+        if (parsed && parsed.balance !== undefined) {
+          if (tgUser && parsed.telegramId === tgUser.id) {
+            return {
+              ...parsed,
+              displayName: `${tgUser.first_name}${tgUser.last_name ? ' ' + tgUser.last_name : ''}`.trim() || parsed.displayName,
+              telegramUsername: tgUser.username ? `@${tgUser.username}` : parsed.telegramUsername,
+              photoUrl: tgUser.photo_url || parsed.photoUrl,
+            };
+          } else if (!tgUser) {
+            return parsed;
+          }
+        }
       } catch (e) {
         // ignore
       }
@@ -65,21 +123,43 @@ function getInitialProfile(): UserProfile {
   }
 
   // Detect Telegram WebApp user immediately
-  const tg = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null;
-  const tgUser = tg?.initDataUnsafe?.user;
+  if (tgUser) {
+    const realName = `${tgUser.first_name}${tgUser.last_name ? ' ' + tgUser.last_name : ''}`.trim() || 'Telegram User';
+    const username = tgUser.username ? `@${tgUser.username}` : `@user_${tgUser.id}`;
+    const photo = tgUser.photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
+    const referralCode = 'TG' + String(tgUser.id).slice(-4) + Math.floor(10 + Math.random() * 90);
 
-  const realName = tgUser ? `${tgUser.first_name}${tgUser.last_name ? ' ' + tgUser.last_name : ''}` : 'User';
-  const username = tgUser?.username ? `@${tgUser.username}` : '@user';
-  const photo = tgUser?.photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
+    return {
+      userId: `tg_${tgUser.id}`,
+      telegramId: tgUser.id,
+      displayName: realName,
+      photoUrl: photo,
+      telegramUsername: username,
+      balance: 0.00,       // Starts from 0
+      coins: 0,           // Starts from 0
+      level: 1,           // Starts from 1
+      totalEarned: 0.00,   // Starts from 0
+      totalWithdrawn: 0.00,
+      todayEarned: 0.00,
+      todayVideosWatched: 0,
+      dailyVideoLimit: 15,
+      referralCode,
+      referralCount: 0,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  // Non-telegram browser user with individual device UID
+  const devId = getUniqueBrowserDeviceId();
+  const shortNum = devId.replace('UID', '').slice(-4);
   const referralCode = 'EARN' + Math.floor(1000 + Math.random() * 9000);
 
-  // STARTING FROM ZERO (০ কয়েন ও ০ টাকা)
   return {
-    userId: tgUser ? `tg_${tgUser.id}` : 'user_' + Date.now(),
-    telegramId: tgUser?.id,
-    displayName: realName,
-    photoUrl: photo,
-    telegramUsername: username,
+    userId: devId,
+    telegramId: devId.replace('UID', ''),
+    displayName: 'User ' + shortNum,
+    photoUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+    telegramUsername: '@user_' + shortNum,
     balance: 0.00,       // Starts from 0
     coins: 0,           // Starts from 0
     level: 1,           // Starts from 1
@@ -105,11 +185,13 @@ export default function App() {
   const [taskCategoryFilter, setTaskCategoryFilter] = useState<string>('all');
   const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([]);
 
-  // Cache userProfile locally
+  // Cache userProfile locally under unique key
   useEffect(() => {
     if (userProfile && typeof window !== 'undefined') {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(userProfile));
+        const tgUser = getTelegramUser();
+        const key = getUserStorageKey(tgUser);
+        localStorage.setItem(key, JSON.stringify(userProfile));
       } catch (e) {
         // ignore
       }
@@ -130,13 +212,33 @@ export default function App() {
         tg.expand();
         if (tg.initDataUnsafe?.user) {
           const u = tg.initDataUnsafe.user;
-          setUserProfile((prev) => ({
-            ...prev,
-            displayName: `${u.first_name}${u.last_name ? ' ' + u.last_name : ''}`,
-            telegramUsername: u.username ? `@${u.username}` : prev.telegramUsername,
-            photoUrl: u.photo_url || prev.photoUrl,
-            telegramId: u.id,
-          }));
+          setUserProfile((prev) => {
+            const fullName = `${u.first_name}${u.last_name ? ' ' + u.last_name : ''}`.trim() || 'Telegram User';
+            const uname = u.username ? `@${u.username}` : `@user_${u.id}`;
+            const photo = u.photo_url || prev.photoUrl;
+            const personalRefCode = 'TG' + String(u.id).slice(-4) + Math.floor(10 + Math.random() * 90);
+
+            if (!prev.telegramId || prev.telegramId !== u.id) {
+              return {
+                ...prev,
+                userId: `tg_${u.id}`,
+                telegramId: u.id,
+                displayName: fullName,
+                telegramUsername: uname,
+                photoUrl: photo,
+                referralCode: prev.referralCode?.startsWith('TG') ? prev.referralCode : personalRefCode,
+              };
+            }
+
+            return {
+              ...prev,
+              userId: `tg_${u.id}`,
+              telegramId: u.id,
+              displayName: fullName,
+              telegramUsername: uname,
+              photoUrl: photo,
+            };
+          });
         }
 
         // Detect start_param from Telegram referral link (e.g. t.me/adearnminibot?start=EARN882 or ?startapp=EARN882)
@@ -167,10 +269,13 @@ export default function App() {
       if (firebaseUser) {
         setCurrentUser(firebaseUser);
         try {
-          const profile = await ensureUserInFirestore(firebaseUser);
+          const tgUser = getTelegramUser();
+          const profile = await ensureUserInFirestore(firebaseUser, tgUser || undefined);
           setUserProfile((prev) => ({
             ...prev,
             ...profile,
+            telegramId: prev.telegramId || profile.telegramId || tgUser?.id,
+            userId: prev.userId || profile.userId,
             displayName: prev.displayName || profile.displayName,
             photoUrl: prev.photoUrl || profile.photoUrl,
             telegramUsername: prev.telegramUsername || profile.telegramUsername,
