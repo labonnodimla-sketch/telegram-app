@@ -402,6 +402,24 @@ export default function App() {
   };
 
   const handleWithdrawalSubmit = async (method: PaymentMethod, account: string, amount: number) => {
+    // Strict withdrawal requirements: 10 referrals & 200 BDT minimum
+    const totalRefs = userProfile.referralCount || 0;
+    if (totalRefs < 10) {
+      throw new Error(`উইথড্র করার জন্য কমপক্ষে ১০টি সফল রেফার প্রয়োজন! আপনার বর্তমান রেফার: ${toBengaliNumber(totalRefs)}টি।`);
+    }
+
+    if (amount < 200) {
+      throw new Error('সর্বনিম্ন উইথড্র পরিমাণ ৳২০০.০০ টাকা!');
+    }
+
+    if (userProfile.balance < 200) {
+      throw new Error('উইথড্র করার জন্য আপনার ব্যালেন্স কমপক্ষে ৳২০০.০০ হতে হবে!');
+    }
+
+    if (amount > userProfile.balance) {
+      throw new Error('আপনার একাউন্টে পর্যাপ্ত ব্যালেন্স নেই!');
+    }
+
     const coinsDeducted = Math.round(amount * 5); // ৳১ = ৫ কয়েন
 
     const newRequest: WithdrawalRequest = {
@@ -619,6 +637,7 @@ export default function App() {
               profile={userProfile}
               withdrawals={withdrawals}
               onSubmitWithdrawal={handleWithdrawalSubmit}
+              onNavigateTab={(tab) => setActiveTab(tab)}
             />
           )}
 

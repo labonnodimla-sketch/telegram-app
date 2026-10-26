@@ -379,6 +379,14 @@ export async function submitWithdrawalRequest(
   coinsEquivalent: number,
   currentProfile: UserProfile
 ): Promise<void> {
+  if ((currentProfile.referralCount || 0) < 10) {
+    throw new Error('উইথড্র করার জন্য কমপক্ষে ১০টি সফল রেফার প্রয়োজন!');
+  }
+
+  if (amountTaka < 200 || currentProfile.balance < 200) {
+    throw new Error('সর্বনিম্ন উইথড্র পরিমাণ ও ব্যালেন্স ৳২০০.০০ হতে হবে!');
+  }
+
   if (currentProfile.balance < amountTaka) {
     throw new Error('অপর্যাপ্ত ব্যালেন্স (Insufficient Balance)');
   }
